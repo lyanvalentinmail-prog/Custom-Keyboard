@@ -11,7 +11,7 @@ jobs:
   build-debug-apk:
     name: Build debug APK
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     permissions:
       contents: read
 
@@ -19,8 +19,6 @@ jobs:
       - name: Checkout keyboard source branch
         uses: actions/checkout@v4
         with:
-          # El workflow puede estar en main para que aparezca en GitHub Actions,
-          # pero el proyecto Android está en esta rama de Arena.
           ref: arena/01a10442-custom-keyboard
 
       - name: Verify Android project exists
@@ -36,21 +34,54 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept licenses and install SDK 35
+      - name: Configure preinstalled Android SDK
+        shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          set -euo pipefail
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "ANDROID_HOME/ANDROID_SDK_ROOT is empty. Looking for preinstalled SDK..."
+            if [ -d "/usr/local/lib/android/sdk" ]; then
+              SDK_ROOT="/usr/local/lib/android/sdk"
+            else
+              echo "Android SDK not found on runner"
+              exit 1
+            fi
+          fi
+
+          echo "Using Android SDK: $SDK_ROOT"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
+          if [ -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          elif command -v sdkmanager >/dev/null 2>&1; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          else
+            echo "sdkmanager not found. Available SDK files:"
+            find "$SDK_ROOT" -maxdepth 4 -type f -name sdkmanager -print || true
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          echo "sdk.dir=$SDK_ROOT" > local.properties
+
+      - name: Install Gradle 8.10.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.10.2-bin.zip -o /tmp/gradle-8.10.2-bin.zip
+          unzip -q /tmp/gradle-8.10.2-bin.zip -d /tmp
+          echo "/tmp/gradle-8.10.2/bin" >> "$GITHUB_PATH"
+          /tmp/gradle-8.10.2/bin/gradle --version
 
       - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug --stacktrace
+        shell: bash
+        run: /tmp/gradle-8.10.2/bin/gradle --no-daemon :app:assembleDebug --stacktrace
 
       - name: Prepare downloadable APK
         run: |
