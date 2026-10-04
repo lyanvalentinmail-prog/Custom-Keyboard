@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Arena Custom Keyboard</string>
+    <string name="ime_name">Arena Samsung-like Keyboard</string>
+    <string name="subtype_es">Español</string>
+    <string name="subtype_en">English</string>
+    <string name="enable_keyboard_title">Activar teclado</string>
+    <string name="select_keyboard_title">Seleccionar teclado</string>
+</resources>
